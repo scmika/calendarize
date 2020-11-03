@@ -8,10 +8,13 @@ declare(strict_types=1);
 
 namespace HDNET\Calendarize\Service;
 
+use HDNET\Calendarize\Domain\Model\Index;
+use HDNET\Calendarize\Domain\Repository\IndexRepository;
 use HDNET\Calendarize\Register;
 use HDNET\Calendarize\Utility\HelperUtility;
 use TYPO3\CMS\Backend\Utility\BackendUtility;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Extbase\SignalSlot\Dispatcher;
 
 /**
  * Helper class for the IndexService
@@ -49,6 +52,8 @@ class IndexPreparationService
         if ($configurations) {
             $timeTableService = GeneralUtility::makeInstance(TimeTableService::class);
             $neededItems = $timeTableService->getTimeTablesByConfigurationIds($configurations);
+            $indexRepository = GeneralUtility::makeInstance(IndexRepository::class);
+            $signalSlot = GeneralUtility::makeInstance(Dispatcher::class);
             foreach ($neededItems as $key => $record) {
                 $record['foreign_table'] = $tableName;
                 $record['foreign_uid'] = $uid;
@@ -65,7 +70,22 @@ class IndexPreparationService
                     $record['end_date']->format('Y-m-d') . ' 00:00:00',
                     new \DateTimeZone('UTC')
                 );
-
+                $slug = '';
+                $slugParams = [
+                    'configurationKey' => $configurationKey,
+                    'uid' => $uid,
+                    'start_date' => $record['start_date'],
+                    'start_time' => $record['start_time'],
+                    'end_date' => $record['end_date'],
+                    'end_time' => $record['end_time'],
+                    'slug' => $slug,
+                ];
+                $returnedParams = $signalSlot->dispatch(__CLASS__, 'makeSlug', $slugParams);
+                $record['slug'] = $returnedParams['slug'];
+                if (!isset($record['slug']) || !$record['slug']) {
+                    $record['slug'] = strtolower($configurationKey).'-'.$record['foreign_uid'].'-'.$record['start_date']->format('Y-m-d');
+                }
+                $record['slug'] = $this->makeUniqueSlug($indexRepository, $record['slug'], $configurationKey, $tableName, $uid, $record['start_date'], $record['start_time']);
                 $this->prepareRecordForDatabase($record);
                 $neededItems[$key] = $record;
             }
@@ -75,6 +95,81 @@ class IndexPreparationService
         $this->addLanguageInformation($neededItems, $tableName, $rawRecord);
 
         return $neededItems;
+    }
+
+    /**
+     * This function returns a unique new slug or a previous one, if already used for same exact combination
+     *
+     * @param IndexRepository $indexRepository
+     * @param string $slug
+     * @param string $expectedConfigurationKey
+     * @param string $expectedTable
+     * @param int $expectedUid
+     * @param \DateTime $expectedStartDate
+     * @param int $expectedStartTime
+     *
+     * @return string
+     */
+    protected function makeUniqueSlug($indexRepository, $slug, $expectedConfigurationKey, $expectedTable, $expectedUid, $expectedStartDate, $expectedStartTime) {
+        $slugResults = $indexRepository->findBySlugLike($slug);
+        $slugCounter = 0;
+        foreach ($slugResults as $slugResult) {
+            if ($this->isSlugEqual($slugResult, $slugCounter, $slug, $expectedConfigurationKey, $expectedTable, $expectedUid, $expectedStartDate, $expectedStartTime)) {
+                return $slugResult->getSlug();
+            }
+            // No match => increase counter
+            ++$slugCounter;
+        }
+        if ($slugCounter > 0) {
+            return $slug.'-'.$slugCounter;
+        } else {
+            return $slug;
+        }
+    }
+
+    /**
+     * Only if all components match, treat this as the expected and correct slug.
+     *
+     * @param Index $slugResult Index object
+     * @param int $slugCounter Current counter, increased if numbers are skipped
+     * @param string $slug real_url equivalent shorthand
+     * @param string $expectedConfigurationKey Configuration key, which must match the Index data
+     * @param string $expectedTable Foreign table which must match the Index data
+     * @param int $expectedUid Foreign uid which must match the Index data
+     * @param \DateTime $expectedStartDate Start date which must match the Index data
+     * @param int $expectedStartTime Start time which must match the Index data
+     *
+     * @return bool True if all relevant parameters are equal, false otherwise
+     */
+    protected function isSlugEqual(Index $slugResult, &$slugCounter, $slug, $expectedConfigurationKey, $expectedTable, $expectedUid, $expectedStartDate, $expectedStartTime) {
+        // Check last block (= unique number part)
+        $remainingSlug = substr($slugResult->getSlug(), strlen($slug)+1);
+        if ($remainingSlug) {
+            $slugComponents = explode('-', $remainingSlug);
+            if (count($slugComponents) === 2) {
+                $currentSlugNumber = (int)$slugComponents[1];
+                if ($currentSlugNumber > $slugCounter) {
+                    // If any number was skipped, use the highest number for subsequent checks
+                    $slugCounter = $currentSlugNumber;
+                }
+            }
+        }
+        if ($slugResult->getUniqueRegisterKey() !== $expectedConfigurationKey) {
+            return false;
+        }
+        if ($slugResult->getForeignTable() !== $expectedTable) {
+            return false;
+        }
+        if ($slugResult->getForeignUid() !== (int)$expectedUid) {
+            return false;
+        }
+        if ($slugResult->getStartDate()->getTimestamp() !== $expectedStartDate->getTimestamp()) {
+            return false;
+        }
+        if ((int)$slugResult->getStartTime() !== (int)$expectedStartTime) {
+            return false;
+        }
+        return true;
     }
 
     /**

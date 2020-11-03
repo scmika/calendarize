@@ -72,6 +72,11 @@ $custom = [
                 'readOnly' => '1',
             ],
         ],
+        'slug' => [
+            'config' => [
+                'readOnly' => '1',
+            ],
+        ],
     ],
 ];
 

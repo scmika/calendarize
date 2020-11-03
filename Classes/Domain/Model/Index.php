@@ -112,6 +112,14 @@ class Index extends AbstractModel
     protected $originalObject;
 
     /**
+     * A real_url slug used for link generation
+     *
+     * @var string
+     * @DatabaseField("string")
+     */
+    protected $slug;
+
+    /**
      * Get the original record for the current index.
      *
      * @throws Exception
@@ -385,5 +393,21 @@ class Index extends AbstractModel
     public function setOpenEndTime($openEndTime)
     {
         $this->openEndTime = $openEndTime;
+    }
+
+    /**
+     * @return string
+     */
+    public function getSlug()
+    {
+        return $this->slug;
+    }
+
+    /**
+     * @param string $slug
+     */
+    public function setSlug($slug)
+    {
+        $this->slug = $slug;
     }
 }

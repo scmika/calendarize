@@ -19,6 +19,7 @@ use TYPO3\CMS\Extbase\Configuration\BackendConfigurationManager;
 use TYPO3\CMS\Extbase\Configuration\ConfigurationManagerInterface;
 use TYPO3\CMS\Extbase\DomainObject\DomainObjectInterface;
 use TYPO3\CMS\Extbase\Persistence\QueryInterface;
+use TYPO3\CMS\Extbase\Persistence\QueryResultInterface;
 
 /**
  * Index repository.
@@ -554,6 +555,24 @@ class IndexRepository extends AbstractRepository
         $query->matching($query->logicalAnd($constraints));
 
         return $query->execute();
+    }
+
+	/**
+	 * Finds all entries with a specified slug (for TYPO3s real_url equivalent)
+	 *
+	 * @param string $slug The beginning of a slug
+	 *
+	 * @return Index[]|QueryResultInterface
+	 */
+	public function findBySlugLike($slug = '') {
+		$query = $this->createQuery();
+		$querySettings = $query->getQuerySettings();
+		$querySettings->setRespectStoragePage(false); // Slug is a global value
+		$query->setOrderings(['slug' => QueryInterface::ORDER_ASCENDING]); // Sort them, so "slug" comes before "slug-5"
+
+		$query->matching($query->like('slug', "$slug%"));
+
+		return $query->execute();
     }
 
     /**
