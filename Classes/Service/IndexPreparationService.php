@@ -74,10 +74,10 @@ class IndexPreparationService
                 $slugParams = [
                     'configurationKey' => $configurationKey,
                     'uid' => $uid,
-                    'start_date' => $record['start_date'],
-                    'start_time' => $record['start_time'],
-                    'end_date' => $record['end_date'],
-                    'end_time' => $record['end_time'],
+                    'startDate' => $record['start_date'],
+                    'startTime' => $record['start_time'],
+                    'endDate' => $record['end_date'],
+                    'endTime' => $record['end_time'],
                     'slug' => $slug,
                 ];
                 $returnedParams = $signalSlot->dispatch(__CLASS__, 'makeSlug', $slugParams);
